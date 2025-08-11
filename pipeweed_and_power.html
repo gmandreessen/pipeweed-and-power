@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeweed & Power — A Tiny Bannerlord-ish Adventure</title>
+<style>
+  :root{
+    --ink:#2c2a27;
+    --ink-soft:#4c463d;
+    --accent:#6e5c3a;
+    --gold:#b38933;
+    --parch:#f6f1e7;
+    --parch-deep:#efe4cf;
+    --leaf:#5e7a4d;
+    --error:#7a3d3d;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
+    background: radial-gradient(1200px 800px at 20% 0%, var(--parch) 0 60%, var(--parch-deep) 60% 100%);
+    color:var(--ink);
+    line-height:1.5;
+  }
+  .wrap{
+    max-width: 760px;
+    margin: 0 auto;
+    padding: clamp(14px, 3vw, 28px);
+  }
+  .card{
+    background: #f9f4e8;
+    border: 2px solid #e3d3b3;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.08), inset 0 0 60px rgba(179,137,51,.07);
+    overflow:hidden;
+  }
+  header{
+    background: linear-gradient(180deg, rgba(179,137,51,.15), transparent 40%);
+    padding: 14px clamp(14px, 3vw, 22px);
+    border-bottom: 1px solid #e8d9bb;
+  }
+  h1{
+    font-size: clamp(22px, 5vw, 34px);
+    margin: 6px 0 2px;
+    letter-spacing:.5px;
+    color: var(--ink);
+    text-shadow: 0 1px 0 #fff;
+  }
+  .sub{
+    font-size: clamp(12px, 2.6vw, 14px);
+    color: var(--ink-soft);
+  }
+  #game{
+    padding: clamp(16px, 3.5vw, 28px);
+  }
+  .stats{
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 10px;
+    margin-bottom: 12px;
+    font-size: clamp(14px, 3.6vw, 16px);
+  }
+  .pill{
+    background: #f4ecd8;
+    border: 1px solid #e1d2b2;
+    border-radius: 999px;
+    padding: 6px 10px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .pill b{color:var(--ink);font-weight:700}
+  .bar{
+    background: #e8dcc1;
+    height: 8px;
+    border-radius: 6px;
+    overflow:hidden;
+    box-shadow: inset 0 0 4px rgba(0,0,0,.1);
+  }
+  .bar > i{
+    display:block;height:100%;width:50%;
+    background: linear-gradient(90deg, var(--leaf), #a0b57f);
+  }
+  .scroll{
+    border-left: 3px solid #e3d3b3;
+    padding: 10px 12px;
+    margin: 8px 0 14px;
+    background: #fcf8f0;
+    box-shadow: inset 0 0 40px rgba(179,137,51,.06);
+  }
+  .scene{
+    white-space: pre-wrap;
+    font-size: clamp(16px, 4vw, 18px);
+  }
+  .choices{display:grid; gap:8px; margin-top: 14px;}
+  .btn{
+    border: 1px solid #d4c19b;
+    background: linear-gradient(180deg, #fff8ea, #f0e2c6);
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: clamp(16px, 4.2vw, 18px);
+    text-align:left;
+    box-shadow: 0 2px 0 #d9c8a7;
+    color: var(--ink);
+  }
+  .btn:hover{filter:brightness(1.02)}
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{
+    border-color: #b38933;
+    background: linear-gradient(180deg, #fff1c9, #f7dc92);
+    box-shadow: 0 2px 0 #b38933;
+  }
+  .row{display:flex; gap:8px; flex-wrap:wrap}
+  .mini{
+    font-size: 12px; color:var(--ink-soft);
+  }
+  .foot{
+    display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;
+  }
+  .mono{font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color:#6a5d45}
+  .toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);
+    background:#fff9e9;border:1px solid #e1d2b2;border-radius:10px;padding:10px 14px;box-shadow:0 8px 26px rgba(0,0,0,.12);
+    display:none;z-index:9;font-size:14px}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <header>
+      <h1>Pipeweed & Power</h1>
+      <div class="sub">A tiny, LOTR‑inspired, Bannerlord‑flavored text adventure starring David • Story + Sandbox</div>
+    </header>
+    <div id="game">
+      <div class="stats" id="stats"></div>
+      <div class="scroll">
+        <div class="scene" id="scene"></div>
+      </div>
+      <div class="choices" id="choices"></div>
+      <div class="foot">
+        <div class="mini" id="status">Year 3019, Third Age</div>
+        <button class="btn" id="copyLink">Shareable Link</button>
+      </div>
+      <div class="mini mono">Tip: Long‑press a choice to see its expected skill (e.g., <em>Persuasion</em>, <em>Command</em>).</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================
+   Minimal Game Engine
+   ========================= */
+const $ = sel => document.querySelector(sel);
+const statsEl = $('#stats');
+const sceneEl = $('#scene');
+const choicesEl = $('#choices');
+const statusEl = $('#status');
+const toastEl = $('#toast');
+
+const game = {
+  mode: 'menu', // 'story' | 'sandbox'
+  node: 'menu',
+  rng: (min, max) => Math.floor(Math.random()*(max-min+1))+min,
+  state: {
+    name: 'David the Wanderer',
+    gold: 30,
+    pipeweed: 8,
+    followers: 2,
+    morale: 60, // 0..100
+    health: 100,
+    faith: 50, // 0..100; can influence outcomes if praying
+    notoriety: 0, // risk attract ambush
+    day: 1,
+    chapter: 1,
+    inventory: ['Worn Sword', 'Pouch of Longbottom Leaf'],
+    flags: {},
+  },
+  // Simple helper to clamp 0..100
+  clamp(n){ return Math.max(0, Math.min(100, n)); },
+  // Rolls with optional advantage if prayed recently
+  roll(base=10){
+    const boost = game.state.flags.prayerBlessing ? 2 : 0;
+    const d = game.rng(1, 12) + boost;
+    if (game.state.flags.prayerBlessing) game.state.flags.prayerBlessing = false; // one-time
+    return d >= base;
+  },
+  // Show a quick toast
+  toast(msg){
+    toastEl.textContent = msg;
+    toastEl.style.display = 'block';
+    setTimeout(()=>toastEl.style.display='none', 1800);
+  }
+};
+
+function renderStats(){
+  const s = game.state;
+  statsEl.innerHTML = `
+    <div class="pill"><b>Gold</b> ${s.gold}</div>
+    <div class="pill"><b>Pipeweed</b> ${s.pipeweed}</div>
+    <div class="pill"><b>Followers</b> ${s.followers}</div>
+    <div class="pill" title="Party morale">
+      <b>Morale</b>
+      <div class="bar" style="flex:1"><i style="width:${game.clamp(s.morale)}%"></i></div>
+    </div>
+    <div class="pill" title="Health">
+      <b>Health</b>
+      <div class="bar" style="flex:1"><i style="width:${game.clamp(s.health)}%"></i></div>
+    </div>
+    <div class="pill" title="Faith">
+      <b>Faith</b>
+      <div class="bar" style="flex:1"><i style="width:${game.clamp(s.faith)}%"></i></div>
+    </div>
+  `;
+}
+
+function setScene(text){
+  sceneEl.textContent = text.trim();
+}
+
+function setChoices(list){
+  choicesEl.innerHTML = '';
+  list.forEach((c, idx)=>{
+    const btn = document.createElement('button');
+    btn.className = 'btn' + (c.primary ? ' primary' : '');
+    btn.textContent = `${idx+1}. ${c.label}`;
+    btn.oncontextmenu = (e)=>{ e.preventDefault(); if(c.hint) game.toast(c.hint); };
+    btn.onpointerdown = (e)=>{
+      // long-press to show hint
+      btn._pressTimer = setTimeout(()=>{ if(c.hint) game.toast(c.hint); }, 520);
+    };
+    btn.onpointerup = (e)=>{ clearTimeout(btn._pressTimer); };
+    btn.onclick = ()=> c.onClick();
+    choicesEl.appendChild(btn);
+  });
+}
+
+function updateStatus(extra=''){
+  statusEl.textContent = `Day ${game.state.day} • ${game.mode === 'story' ? 'Story' : game.mode === 'sandbox' ? 'Sandbox' : 'Menu'}${extra? ' • '+extra:''}`;
+}
+
+function startMenu(){
+  game.mode = 'menu';
+  setScene(`Year 3019 of the Third Age.\n\nYou are David the Wanderer — a warm, steady captain with a hopeful heart, a worn sword, and a pouch of Longbottom Leaf. Peace is fragile, coin is thin, and the pipeweed trade is booming.\n\nChoose your path.`);
+  setChoices([
+    {label:'Begin the Story‑Driven Campaign', primary:true, onClick: ()=>startStory()},
+    {label:'Enter Sandbox Mode', onClick: ()=>startSandbox()},
+    {label:'About This Game', onClick: ()=>{
+      setScene(`A tiny, phone‑friendly text adventure inspired by strategy games and the world of wandering captains.\n\n• Long‑press choices for hints.\n• "Pray for guidance" is often available — it can quietly help.\n• Kindness and courage matter. Winning is not the only victory.`);
+      setChoices([
+        {label:'Back', onClick: startMenu}
+      ]);
+    }}
+  ]);
+  renderStats(); updateStatus();
+}
+
+/* =========================
+   STORY MODE (Chaptered)
+   ========================= */
+const story = {
+  nodes: {
+    intro:`The Greenway smells of rain. Beside you, a pair of farmhands wave as you pass — news of raiders has everyone on edge.\n\nAt dusk, you reach a crossroads: to the east, lanterns of a tavern called The Embered Harp; to the west, a smoke‑stained watchtower said to be abandoned.\n\nYour followers look to you with trust. “Your call, captain,” one says.\n`,
+    tavern:`The Embered Harp is warm, rich with stew and the sweet scent of pipeweed. A hooded merchant beckons.\n\n“Captain David,” he says, somehow knowing your name. “I trade in leaf and news. Raiders pressed a village nearby. Help them, and your name will be sung.”\n\nHe offers a map… for a price.`,
+    tower:`The watchtower groans in the wind. Inside, you find a faded banner and a ledger of old names — captains who once kept these roads safe. In the corner: a cache of arrows and a bundle of mid‑grade pipeweed.`,
+    village:`You arrive to smoke and shouts. Raiders circle the granary. Villagers huddle behind carts. Your followers await your command.`,
+    aftermathMercy:`The raiders scatter. One wounded youth crawls away. Your follower lifts a spear. “Orders?”\n`,
+    finale:`The village sets a long table. Children laugh; someone tunes a fiddle. An elder thanks you: “You fought with courage — and mercy. May your days be steady, captain.”\n\nYour name spreads. More will come.\n\n— End of Chapter One —`,
+  }
+};
+
+function startStory(){
+  game.mode = 'story';
+  game.state.day = 1;
+  game.node = 'intro';
+  renderStats(); updateStatus('Chapter 1');
+  sceneIntro();
+}
+
+function sceneIntro(){
+  setScene(story.nodes.intro);
+  setChoices([
+    {label:'Enter The Embered Harp (tavern)', primary:true, hint:'Gather info • Persuasion', onClick: ()=>{ game.node='tavern'; sceneTavern(); }},
+    {label:'Scout the abandoned watchtower', hint:'Scouting • Caution', onClick: ()=>{ game.node='tower'; sceneTower(); }}
+  ]);
+}
+
+function sceneTavern(){
+  setScene(story.nodes.tavern);
+  setChoices([
+    {label:'Buy the map (10 gold)', primary:true, hint:'Barter • Resource use', onClick: ()=>{
+      if(game.state.gold>=10){
+        game.state.gold-=10; renderStats();
+        game.toast('You purchase the map to the raided village.');
+        sceneVillage(true);
+      } else {
+        game.toast('Not enough gold.');
+      }
+    }},
+    {label:'Persuade him to part with the map for a blessing', hint:'Persuasion • Faith', onClick: ()=>{
+      // roll with slight faith boost
+      const target = 9;
+      const faithBoost = game.state.faith>60 ? 1 : 0;
+      const ok = (game.rng(1,12)+faithBoost) >= target;
+      if(ok){
+        game.state.faith = game.clamp(game.state.faith+4);
+        game.toast('“Your words hearten me, captain.” He gifts the map.');
+        sceneVillage(true);
+      } else {
+        game.state.faith = game.clamp(game.state.faith-3);
+        game.toast('He smiles sadly. “I cannot.”');
+      }
+    }},
+    {label:'Share your pipeweed, trade for news', hint:'Kindness • Trade', onClick: ()=>{
+      if(game.state.pipeweed>0){
+        game.state.pipeweed -= 1; renderStats();
+        game.toast('You share leaf; in return he marks the map for free.');
+        sceneVillage(true);
+      } else {
+        game.toast('You are out of leaf.');
+      }
+    }},
+    {label:'Pray quietly for guidance', hint:'Faith • Quiet courage', onClick: ()=>{
+      game.state.faith = game.clamp(game.state.faith+8);
+      game.state.flags.prayerBlessing = true;
+      renderStats();
+      game.toast('“Teach me to do what is right.”');
+    }},
+    {label:'Leave the tavern', onClick: sceneIntro}
+  ]);
+}
+
+function sceneTower(){
+  const lootGold = game.rng(3,6);
+  const lootLeaf = game.rng(1,2);
+  game.state.gold += lootGold;
+  game.state.pipeweed += lootLeaf;
+  renderStats();
+  setScene(story.nodes.tower + `\nYou gain +${lootGold} gold, +${lootLeaf} leaf.`);
+  setChoices([
+    {label:'Light a small lantern and pray', hint:'Faith • Resolve', onClick: ()=>{
+      game.state.faith = game.clamp(game.state.faith+10);
+      game.state.morale = game.clamp(game.state.morale+6);
+      game.state.flags.prayerBlessing = true;
+      renderStats();
+      game.toast('“Even in ruins, light remains.”');
+      sceneVillage(false);
+    }},
+    {label:'Take the supplies and march for the village', primary:true, hint:'Command • Speed', onClick: ()=> sceneVillage(false)},
+    {label:'Return to the crossroads', onClick: sceneIntro}
+  ]);
+}
+
+function sceneVillage(hasMap){
+  game.state.day += 1; updateStatus('Chapter 1');
+  const approach = hasMap ? 'With the merchant’s marks you arrive swiftly.' : 'Without a clear map you lose time on back roads.';
+  if(!hasMap){
+    game.state.morale = game.clamp(game.state.morale-6);
+    renderStats();
+  }
+  setScene(story.nodes.village + '\n' + approach);
+  setChoices([
+    {label:'Rally the villagers and charge together', primary:true, hint:'Command • Courage', onClick: ()=>battle('frontal')},
+    {label:'Set an ambush by the granary carts', hint:'Tactics • Stealth', onClick: ()=>battle('ambush')},
+    {label:'Offer the raiders mercy if they leave now', hint:'Persuasion • Mercy', onClick: ()=>mercyCall()},
+    {label:'Pray for wisdom before you move', hint:'Faith • Calm hearts', onClick: ()=>{
+      game.state.faith = game.clamp(game.state.faith+8);
+      game.state.morale = game.clamp(game.state.morale+4);
+      game.state.flags.prayerBlessing = true;
+      renderStats();
+      game.toast('“Guide our steps, make us steadfast.”');
+    }}
+  ]);
+}
+
+function battle(type){
+  let target = 9;
+  let text = '';
+  if(type==='frontal'){ target = 10; text='You raise your sword and roar. Villagers surge beside you.'; }
+  if(type==='ambush'){ target = 9; text='You signal from the shadows — carts roll, raiders stumble.'; }
+  const ok = game.roll(target);
+  if(ok){
+    game.state.morale = game.clamp(game.state.morale+8);
+    game.state.notoriety += 3;
+    renderStats();
+    setScene(text + `\n\nThe raiders break; you win the field.`);
+    setChoices([
+      {label:'Secure the village', primary:true, onClick: ()=> aftermath()}
+    ]);
+  } else {
+    game.state.health = game.clamp(game.state.health-20);
+    game.state.morale = game.clamp(game.state.morale-10);
+    renderStats();
+    setScene(text + `\n\nThe push falters. You take a wound but hold the line.`);
+    setChoices([
+      {label:'Press on!', primary:true, onClick: ()=> aftermath()},
+      {label:'Order a disciplined retreat', onClick: ()=>{
+        game.state.morale = game.clamp(game.state.morale-6);
+        renderStats();
+        aftermath();
+      }}
+    ]);
+  }
+}
+
+function mercyCall(){
+  // persuasion with faith influence
+  const ok = (game.rng(1,12) + (game.state.faith>55?1:0)) >= 9;
+  if(ok){
+    game.state.morale = game.clamp(game.state.morale+10);
+    game.state.notoriety = Math.max(0, game.state.notoriety-1);
+    renderStats();
+    setScene(`You step forward, hands open. “Lay down your arms; take food and go. No blood today.”\n\nA hush. Then a raider lowers his blade. Others follow. The village is spared.`);
+    setChoices([{label:'Enter the village', primary:true, onClick: aftermathMercy}]);
+  } else {
+    setScene(`Your offer hangs in the air — then an arrow answers. So be it.`);
+    setChoices([{label:'Charge!', primary:true, onClick: ()=>battle('frontal')}]);
+  }
+}
+
+function aftermathMercy(){
+  setScene(story.nodes.aftermathMercy);
+  setChoices([
+    {label:'Spare him and bind his wound', primary:true, hint:'Mercy • Kindness', onClick: ()=>{
+      game.state.faith = game.clamp(game.state.faith+8);
+      game.state.morale = game.clamp(game.state.morale+6);
+      renderStats();
+      aftermath(true);
+    }},
+    {label:'Take him prisoner but feed him', hint:'Pragmatism • Order', onClick: ()=>{
+      game.state.morale = game.clamp(game.state.morale+3);
+      renderStats();
+      aftermath(false);
+    }},
+    {label:'Let your follower decide', hint:'Trust • Leadership', onClick: ()=>{
+      const ok = game.roll(9);
+      if(ok){ game.state.morale = game.clamp(game.state.morale+5); } else { game.state.morale = game.clamp(game.state.morale-4); }
+      renderStats(); aftermath(ok);
+    }}
+  ]);
+}
+
+function aftermath(merciful=false){
+  const reward = 12 + (merciful?4:0);
+  const leaf = 2 + (merciful?1:0);
+  game.state.gold += reward;
+  game.state.pipeweed += leaf;
+  renderStats();
+  setScene(story.nodes.finale + `\nRewards: +${reward} gold, +${leaf} pipeweed.`);
+  setChoices([
+    {label:'Continue to Chapter 2 (coming soon)', onClick: ()=>{
+      setScene(`Thank you for playing Chapter 1! You’ve unlocked Sandbox Mode for free roaming.`);
+      setChoices([
+        {label:'Enter Sandbox Mode', primary:true, onClick: startSandbox},
+        {label:'Restart Chapter 1', onClick: startStory},
+        {label:'Back to Main Menu', onClick: startMenu},
+      ]);
+    }},
+    {label:'Enter Sandbox Mode now', primary:true, onClick: startSandbox},
+    {label:'Restart Chapter 1', onClick: startStory},
+    {label:'Main Menu', onClick: startMenu},
+  ]);
+}
+
+/* =========================
+   SANDBOX MODE
+   ========================= */
+const places = ['Greenway','Buckland Ford','Chetwood Edge','Barley Downs','Old Road Market','Riverstairs'];
+function startSandbox(){
+  game.mode = 'sandbox';
+  renderStats(); updateStatus('Free Roam');
+  sandboxTick('A wide road and a kind sky. Your company waits on your word.');
+}
+
+function sandboxTick(flavor=''){
+  const p = places[game.rng(0, places.length-1)];
+  setScene(`${flavor}\n\nYou make camp near ${p}. What will you do?`);
+  setChoices([
+    {label:'Travel to a new region', primary:true, hint:'Exploration', onClick: ()=>{
+      game.state.day+=1; updateStatus('Free Roam');
+      if(game.rng(1,10) <= 3) return encounter();
+      sandboxTick('You walk until the sun tilts west.');
+    }},
+    {label:'Trade pipeweed at a market', hint:'Barter • Profit', onClick: ()=>{
+      if(game.state.pipeweed<=0){ game.toast('You have no leaf to trade.'); return; }
+      const price = game.rng(4,7);
+      const sold = Math.min(game.state.pipeweed, game.rng(1,3));
+      game.state.pipeweed -= sold; game.state.gold += sold*price;
+      game.state.morale = game.clamp(game.state.morale+2);
+      renderStats();
+      sandboxTick(`You sell ${sold} leaf for ${sold*price} gold.`);
+    }},
+    {label:'Recruit followers at a tavern', hint:'Persuasion • Coin', onClick: ()=>{
+      const cost = game.rng(6,10);
+      if(game.state.gold < cost){ game.toast('Not enough gold to recruit.'); return; }
+      const ok = game.roll(9);
+      game.state.gold -= cost;
+      if(ok){ game.state.followers += 1; game.toast('A steady farmhand joins your banner.'); }
+      else{ game.toast('No one seems ready to leave home.'); }
+      renderStats();
+      sandboxTick('The tavern hums with song.');
+    }},
+    {label:'Quest: Guard a caravan', hint:'Skirmish • Reward', onClick: ()=>{
+      const ok = game.roll(10);
+      if(ok){
+        const g= game.rng(10,16);
+        game.state.gold += g; game.state.morale = game.clamp(game.state.morale+4);
+        sandboxTick(`You thwart a bandit probe. The caravan master pays you ${g} gold.`);
+      } else {
+        game.state.health = game.clamp(game.state.health-12);
+        game.state.morale = game.clamp(game.state.morale-4);
+        sandboxTick('An ambush bites hard. You drive them off but take losses.');
+      }
+      renderStats();
+    }},
+    {label:'Rest & share pipeweed with the party', hint:'Care • Warmth', onClick: ()=>{
+      if(game.state.pipeweed>0){ game.state.pipeweed -= 1; }
+      game.state.health = game.clamp(game.state.health+8);
+      game.state.morale = game.clamp(game.state.morale+8);
+      renderStats();
+      sandboxTick('Stories circle the fire; hope rises with the smoke.');
+    }},
+    {label:'Pray for guidance', hint:'Faith • Small blessing', onClick: ()=>{
+      game.state.faith = game.clamp(game.state.faith+6);
+      game.state.flags.prayerBlessing = true;
+      renderStats();
+      sandboxTick('You breathe deep. “Make our steps sure.”');
+    }},
+    {label:'Back to Main Menu', onClick: startMenu}
+  ]);
+}
+
+function encounter(){
+  const r = game.rng(1,4);
+  if(r===1){
+    setScene(`A grizzled captain blocks the road. “Trial by single combat,” he growls. “Winner takes a purse of gold.”`);
+    setChoices([
+      {label:'Accept the duel', primary:true, hint:'Duel • Courage', onClick: ()=>{
+        const ok = game.roll(10);
+        if(ok){ const g=game.rng(8,15); game.state.gold+=g; renderStats(); sandboxTick(`Your stroke is clean. You win ${g} gold.`); }
+        else { game.state.health=game.clamp(game.state.health-15); renderStats(); sandboxTick('You yield before the last cut. Pride aches, but you live.'); }
+      }},
+      {label:'Decline, offer a blessing and leaf', hint:'Mercy • Kindness', onClick: ()=>{
+        if(game.state.pipeweed>0){ game.state.pipeweed-=1; game.state.faith=game.clamp(game.state.faith+4); renderStats(); }
+        sandboxTick('He laughs, then softens. “Walk on, good captain.”');
+      }},
+    ]);
+  } else if(r===2){
+    setScene(`Smoke on the horizon: a hamlet signals for help.`);
+    setChoices([
+      {label:'Ride to aid them', primary:true, hint:'Command • Speed', onClick: ()=>{
+        const ok = game.roll(9);
+        if(ok){ game.state.morale=game.clamp(game.state.morale+6); game.state.gold+=6; renderStats(); sandboxTick('Bandits scatter before your banner. The grateful folk pay a little gold.'); }
+        else { game.state.health=game.clamp(game.state.health-10); renderStats(); sandboxTick('You arrive late; you still drive the raiders, but wounds are taken.'); }
+      }},
+      {label:'Stop to pray, then go', hint:'Faith • Resolve', onClick: ()=>{
+        game.state.flags.prayerBlessing = true; const ok = game.roll(9);
+        if(ok){ game.state.morale=game.clamp(game.state.morale+8); renderStats(); sandboxTick('You move with quiet purpose. The day bends kindly.'); }
+        else { sandboxTick('Your prayer steadies you, but fate is mixed.'); }
+      }}
+    ]);
+  } else if(r===3){
+    setScene(`A kindly herbalist offers to trade salves for leaf.`);
+    setChoices([
+      {label:'Trade 1 leaf for +12 health', primary:true, hint:'Trade • Care', onClick: ()=>{
+        if(game.state.pipeweed>0){ game.state.pipeweed-=1; game.state.health=game.clamp(game.state.health+12); renderStats(); }
+        sandboxTick('Your wounds knit a little under her care.');
+      }},
+      {label:'Decline politely', onClick: ()=> sandboxTick('You wish her peace and safe roads.')}
+    ]);
+  } else {
+    setScene(`A wandering minstrel asks your story and offers a song.`);
+    setChoices([
+      {label:'Share your testimony of hope', primary:true, hint:'Faith • Encouragement', onClick: ()=>{
+        game.state.faith = game.clamp(game.state.faith+6);
+        game.state.morale = game.clamp(game.state.morale+6);
+        renderStats();
+        sandboxTick('The song rings out over the valley like a promise.');
+      }},
+      {label:'Give a coin and move on', onClick: ()=>{
+        if(game.state.gold>0) game.state.gold-=1; renderStats();
+        sandboxTick('He bows, smiling. “Light keep you, captain.”');
+      }}
+    ]);
+  }
+}
+
+/* =========================
+   Link Sharing (Copy URL)
+   ========================= */
+$('#copyLink').addEventListener('click', ()=>{
+  // If hosted, use current URL; if local file, suggest hosting
+  const url = location.href;
+  navigator.clipboard.writeText(url).then(()=>{
+    game.toast('Link copied. Text it to David!');
+  }).catch(()=>{
+    game.toast('Copy failed. Long‑press the address bar to share.');
+  });
+});
+
+// Init
+startMenu();
+renderStats();
+updateStatus();
+</script>
+</body>
+</html>
